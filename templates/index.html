@@ -3,67 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tremor Tracker Dashboard</title>
+    <title>Tremor Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
-    <h1>⟁ Tremor Tracker Dashboard</h1>
-
-    <div id="connectionStatus">
-        <span class="status-dot" id="dot"></span>
-        <span id="statusText">Connecting...</span>
-    </div>
-
-    <!-- Summary Cards -->
-    <div class="grid">
-        <div class="card">
-            <div class="label">Total Batches</div>
-            <div class="value" id="totalBatches">—</div>
-        </div>
-        <div class="card">
-            <div class="label">None</div>
-            <div class="value none" id="countNone">—</div>
-        </div>
-        <div class="card">
-            <div class="label">Mild</div>
-            <div class="value mild" id="countMild">—</div>
-        </div>
-        <div class="card">
-            <div class="label">Moderate</div>
-            <div class="value moderate" id="countModerate">—</div>
-        </div>
-        <div class="card">
-            <div class="label">Severe</div>
-            <div class="value severe" id="countSevere">—</div>
-        </div>
-    </div>
-
-    <!-- Live Feed -->
-    <div class="feed-card">
-        <h2>
-            <span class="status-dot live" id="feedDot"></span>
-            Live Feed
-        </h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Sensor</th>
-                    <th>Severity</th>
-                    <th>Magnitude</th>
-                    <th>Samples</th>
-                </tr>
-            </thead>
-            <tbody id="feedBody">
-                <tr>
-                    <td colspan="5" class="empty">Waiting for data...</td>
-                </tr>
-            </tbody>
-        </table>
-        <button class="btn" onclick="clearData()">Clear Data</button>
-    </div>
-
-    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+    <div id="root"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+    <script type="text/babel" src="{{ url_for('static', filename='calendar.js') }}"></script>
+    <script type="text/babel" src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>

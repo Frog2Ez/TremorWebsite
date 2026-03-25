@@ -1,89 +1,220 @@
-let lastBatchCount = 0;
+// dashboard.js
 
-// ── Fetch & render summary cards ────────────────────────────────
+const { useState, useEffect, useRef } = React;
 
-async function fetchSummary() {
-    try {
-        const res = await fetch('/api/summary');
-        const data = await res.json();
+const COLORS = {
+    none:     '#00c853',
+    mild:     '#ffd600',
+    moderate: '#ff6d00',
+    severe:   '#dd2c00',
+};
 
-        document.getElementById('totalBatches').textContent = data.totalBatches;
-        document.getElementById('countNone').textContent     = data.summary.none;
-        document.getElementById('countMild').textContent     = data.summary.mild;
-        document.getElementById('countModerate').textContent = data.summary.moderate;
-        document.getElementById('countSevere').textContent   = data.summary.severe;
-    } catch (e) {
-        setOffline();
+// ── Live Seismograph ──────────────────────────────────────────────
+
+function Seismograph({ title, data }) {
+    const canvasRef = useRef(null);
+    const buffer    = useRef([]);
+    const lastTimestampRef = useRef(null);
+
+    useEffect(() => {
+    if (!data || data.length === 0) return;
+
+    const newPoints = data.filter(point => {
+        return (
+            !lastTimestampRef.current ||
+            new Date(point.receivedAt) > new Date(lastTimestampRef.current)
+        );
+    });
+
+    if (newPoints.length > 0) {
+        lastTimestampRef.current =
+            newPoints[newPoints.length - 1].receivedAt;
     }
-}
 
-// ── Fetch & render live feed ────────────────────────────────────
+    newPoints.forEach(point => {
+        buffer.current.push({
+            mag: point.magnitude || 0,
+            sev: point.severity || 'none',
+        });
+    });
+    }, [data]);
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx    = canvas.getContext('2d');
+        let   frame;
 
-async function fetchFeed() {
-    try {
-        const res = await fetch('/api/batches?limit=50');
-        const batches = await res.json();
+        function draw() {
+            const W   = canvas.width;
+            const H   = canvas.height;
+            const buf = buffer.current;
 
-        setOnline();
+            while (buf.length > W) buf.shift();
 
-        // Only re-render if new data arrived
-        if (batches.length === lastBatchCount) return;
-        lastBatchCount = batches.length;
+            ctx.fillStyle = '#060b10';
+            ctx.fillRect(0, 0, W, H);
 
-        const tbody = document.getElementById('feedBody');
-        tbody.innerHTML = '';
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.setLineDash([4, 6]);
+            ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+            ctx.setLineDash([]);
 
-        // Show newest first
-        const reversed = [...batches].reverse();
+            for (let i = 1; i < buf.length; i++) {
+                const x1  = W - buf.length + i - 1;
+                const x2  = W - buf.length + i;
+                const y1  = H / 2 - (buf[i - 1].mag / 12) * (H / 2 - 8);
+                const y2  = H / 2 - (buf[i].mag     / 12) * (H / 2 - 8);
+                const col = COLORS[buf[i].sev];
 
-        for (const b of reversed) {
-            const time = new Date(b.receivedAt).toLocaleTimeString();
-            const mag  = typeof b.magnitude === 'number' ? b.magnitude.toFixed(3) : '—';
-            const sev  = b.severity || 'none';
+                ctx.strokeStyle = col;
+                ctx.lineWidth   = 1.5;
+                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            }
 
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${time}</td>
-                <td>${b.sensor || '—'}</td>
-                <td><span class="badge ${sev}">${sev}</span></td>
-                <td>${mag}</td>
-                <td>${b.sampleCount || '—'}</td>
-            `;
-            tbody.appendChild(row);
+            frame = requestAnimationFrame(draw);
         }
-    } catch (e) {
-        setOffline();
-    }
+
+        draw();
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
+    const latest  = buffer.current[buffer.current.length - 1];
+    const lastMag = latest ? latest.mag.toFixed(3) : '—';
+    const lastSev = latest ? latest.sev : 'none';
+
+    return (
+        <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontFamily: 'IBM Plex Mono', fontSize: 11 }}>
+                <span style={{ color: '#4a6070', textTransform: 'uppercase', letterSpacing: 2 }}>{title}</span>
+                <span style={{ color: COLORS[lastSev] }}>{lastMag} — {lastSev}</span>
+            </div>
+            <canvas
+                ref={canvasRef}
+                width={900}
+                height={120}
+                style={{ width: '100%', height: 120, borderRadius: 4, border: '1px solid #111d28', display: 'block' }}
+            />
+        </div>
+    );
 }
 
-// ── Connection state helpers ────────────────────────────────────
+// ── Live View ─────────────────────────────────────────────────────
 
-function setOnline() {
-    document.getElementById('dot').classList.add('live');
-    document.getElementById('statusText').textContent = 'Receiving data';
+function LiveView() {
+    const [allBatches, setAllBatches] = useState([]);
+    const [summary,    setSummary]    = useState({ totalBatches: 0, summary: { none: 0, mild: 0, moderate: 0, severe: 0 } });
+    const [online,     setOnline]     = useState(false);
+
+    useEffect(() => {
+        async function fetchData() {
+            try {
+                const [bRes, sRes] = await Promise.all([
+                    fetch('/api/batches?limit=500'),
+                    fetch('/api/summary'),
+                ]);
+                setAllBatches(await bRes.json());
+                setSummary(await sRes.json());
+                setOnline(true);
+            } catch { setOnline(false); }
+        }
+        fetchData();
+        const id = setInterval(fetchData, 2000);
+        return () => clearInterval(id);
+    }, []);
+
+    const gyro  = allBatches.filter(b => b.sensor === 'GYROSCOPE');
+    const accel = allBatches.filter(b => b.sensor === 'ACCELEROMETER');
+    const s     = summary.summary;
+
+    return (
+        <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'IBM Plex Mono', fontSize: 11, color: online ? '#00c853' : '#dd2c00', marginBottom: 20 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: online ? '#00c853' : '#dd2c00' }} />
+                {online ? 'LIVE' : 'OFFLINE'}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+                {[
+                    { label: 'Total',    value: summary.totalBatches, color: '#ccd6e0' },
+                    { label: 'None',     value: s.none,               color: COLORS.none },
+                    { label: 'Mild',     value: s.mild,               color: COLORS.mild },
+                    { label: 'Moderate', value: s.moderate,           color: COLORS.moderate },
+                    { label: 'Severe',   value: s.severe,             color: COLORS.severe },
+                ].map(card => (
+                    <div key={card.label} style={{ flex: 1, background: '#0d1117', border: '1px solid #111d28', borderRadius: 6, padding: '12px 16px' }}>
+                        <div style={{ fontSize: 10, color: '#3a5060', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6, fontFamily: 'IBM Plex Mono' }}>{card.label}</div>
+                        <div style={{ fontSize: 26, fontWeight: 500, fontFamily: 'IBM Plex Mono', color: card.color }}>{card.value}</div>
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ background: '#0d1117', border: '1px solid #111d28', borderRadius: 6, padding: 16 }}>
+                <div style={{ fontSize: 10, color: '#3a5060', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 14, fontFamily: 'IBM Plex Mono' }}>Seismograph</div>
+                <Seismograph title="Gyroscope"     data={gyro}  />
+                <Seismograph title="Accelerometer" data={accel} />
+            </div>
+        </div>
+    );
 }
 
-function setOffline() {
-    document.getElementById('dot').classList.remove('live');
-    document.getElementById('statusText').textContent = 'No connection';
+// ── History View ──────────────────────────────────────────────────
+// Graph on top, calendar below it.
+
+function HistoryView() {
+    const [selectedDate, setSelectedDate] = useState(null);
+
+    return (
+        <div>
+            {/* Graph area — shows placeholder or day detail */}
+            <div style={{ marginBottom: 24 }}>
+                {selectedDate
+                    ? <DayDetail dateStr={selectedDate} onClose={() => setSelectedDate(null)} />
+                    : <div style={{ background: '#0d1117', border: '1px solid #111d28', borderRadius: 6, padding: 24, fontFamily: 'IBM Plex Mono', fontSize: 12, color: '#2a4050' }}>
+                        Select a day on the calendar to view tremor data
+                      </div>
+                }
+            </div>
+
+            {/* Calendar below */}
+            <Calendar
+                onSelectDate={setSelectedDate}
+                selectedDate={selectedDate}
+            />
+        </div>
+    );
 }
 
-// ── Clear button ────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────
 
-async function clearData() {
-    await fetch('/api/clear', { method: 'POST' });
-    lastBatchCount = 0;
-    fetchSummary();
-    fetchFeed();
+function App() {
+    const [tab, setTab] = useState('live');
+
+    const tabStyle = active => ({
+        background: 'none',
+        border: 'none',
+        borderBottom: active ? '2px solid #ccd6e0' : '2px solid transparent',
+        color: active ? '#ccd6e0' : '#3a5060',
+        fontFamily: 'IBM Plex Mono',
+        fontSize: 12,
+        letterSpacing: 1,
+        padding: '8px 0',
+        marginRight: 24,
+        cursor: 'pointer',
+        textTransform: 'uppercase',
+    });
+
+    return (
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+            <div style={{ paddingBottom: 16, marginBottom: 4, fontFamily: 'IBM Plex Mono', fontSize: 18, color: '#ccd6e0', letterSpacing: 1 }}>
+                TREMOR TRACKER
+            </div>
+            <div style={{ borderBottom: '1px solid #111d28', marginBottom: 24 }}>
+                <button style={tabStyle(tab === 'live')}    onClick={() => setTab('live')}>Live</button>
+                <button style={tabStyle(tab === 'history')} onClick={() => setTab('history')}>History</button>
+            </div>
+            {tab === 'live'    && <LiveView />}
+            {tab === 'history' && <HistoryView />}
+        </div>
+    );
 }
 
-// ── Poll every 2 seconds ────────────────────────────────────────
-
-setInterval(() => {
-    fetchSummary();
-    fetchFeed();
-}, 2000);
-
-// Initial load
-fetchSummary();
-fetchFeed();
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
