@@ -94,6 +94,7 @@ function LiveView() {
     const [allBatches, setAllBatches] = useState([]);
     const [summary,    setSummary]    = useState({ totalBatches: 0, summary: { none: 0, mild: 0, moderate: 0, severe: 0 } });
     const [online,     setOnline]     = useState(false);
+    const [tremor,     setTremor]     = useState({ detected: false, severity: 'none' });
 
     useEffect(() => {
         async function fetchData() {
@@ -102,9 +103,21 @@ function LiveView() {
                     fetch('/api/batches?limit=500'),
                     fetch('/api/summary'),
                 ]);
-                setAllBatches(await bRes.json());
+                const batches = await bRes.json();
+                setAllBatches(batches);
                 setSummary(await sRes.json());
                 setOnline(true);
+
+                // Check the most recent gyroscope batch for tremor status
+                const recentGyro = [...batches]
+                    .filter(b => b.sensor === 'GYROSCOPE')
+                    .pop();
+                if (recentGyro) {
+                    setTremor({
+                        detected: recentGyro.detected,
+                        severity: recentGyro.severity || 'none',
+                    });
+                }
             } catch { setOnline(false); }
         }
         fetchData();
@@ -116,11 +129,35 @@ function LiveView() {
     const accel = allBatches.filter(b => b.sensor === 'ACCELEROMETER');
     const s     = summary.summary;
 
+    const tremorColor = tremor.detected ? COLORS[tremor.severity] : '#3a5060';
+    const tremorLabel = tremor.detected ? `TREMOR DETECTED — ${tremor.severity.toUpperCase()}` : 'NO TREMOR DETECTED';
+
     return (
         <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'IBM Plex Mono', fontSize: 11, color: online ? '#00c853' : '#dd2c00', marginBottom: 20 }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: online ? '#00c853' : '#dd2c00' }} />
-                {online ? 'LIVE' : 'OFFLINE'}
+            {/* Connection + tremor status row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'IBM Plex Mono', fontSize: 11, color: online ? '#00c853' : '#dd2c00' }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: online ? '#00c853' : '#dd2c00' }} />
+                    {online ? 'LIVE' : 'OFFLINE'}
+                </div>
+
+                {/* Tremor status banner */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: tremor.detected ? tremorColor + '18' : '#0d1117',
+                    border: `1px solid ${tremor.detected ? tremorColor : '#111d28'}`,
+                    borderRadius: 6, padding: '8px 16px',
+                    transition: 'all 0.3s',
+                }}>
+                    <div style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: tremorColor,
+                        boxShadow: tremor.detected ? `0 0 8px ${tremorColor}` : 'none',
+                    }} />
+                    <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: tremorColor, letterSpacing: 1 }}>
+                        {tremorLabel}
+                    </span>
+                </div>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
