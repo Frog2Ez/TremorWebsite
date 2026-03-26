@@ -11,8 +11,8 @@ const MONTHS   = ['January','February','March','April','May','June','July','Augu
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const PX_PER_POINT = 8;
-const AXIS_W       = 34;   // pixels reserved on the left for Y axis
-const Y_TICKS      = [0, 3, 6, 9, 12];
+const AXIS_W       = 34;
+const Y_TICKS      = [0, 2, 4, 6, 8, 10, 12];
 
 
 // -------------------- Helpers ------------------------------------------------
@@ -23,13 +23,13 @@ const formatTime = (iso) =>
 const sortByTime = (batches) =>
     [...batches].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
 
+// Maps magnitude to Y using the full canvas height
 const getY = (mag, H) =>
-    H / 2 - (mag / 12) * (H / 2 - 8);
+    H - 8 - (mag / 12) * (H - 16);
 
 
 // -------------------- Drawing Functions ------------------------------------------------
 
-// Draws Y axis labels and horizontal grid lines at each tick value
 function drawYAxis(ctx, W, H) {
     ctx.font      = '9px IBM Plex Mono';
     ctx.textAlign = 'right';
@@ -37,7 +37,6 @@ function drawYAxis(ctx, W, H) {
     Y_TICKS.forEach(mag => {
         const y = getY(mag, H);
 
-        // Horizontal grid line — solid for 0 (baseline), dotted for the rest
         ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
         ctx.lineWidth   = 1;
         ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
@@ -47,7 +46,6 @@ function drawYAxis(ctx, W, H) {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Label
         ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
         ctx.fillText(mag, AXIS_W - 4, y + 3);
     });
@@ -55,7 +53,6 @@ function drawYAxis(ctx, W, H) {
     ctx.textAlign = 'left';
 }
 
-// Draws the waveform, offset by AXIS_W so it doesn't overlap the Y axis labels
 function drawWaveform(ctx, data, H) {
     for (let i = 1; i < data.length; i++) {
         const prev = data[i - 1];
@@ -70,7 +67,6 @@ function drawWaveform(ctx, data, H) {
     }
 }
 
-// Draws time labels along the bottom, offset by AXIS_W
 function drawTimeLabels(ctx, data, H) {
     const step = Math.max(1, Math.floor(120 / PX_PER_POINT));
 
@@ -130,7 +126,7 @@ function HistorySeismograph({ title, batches }) {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const ctx       = canvas.getContext('2d');
+        const ctx             = canvas.getContext('2d');
         const { width: W, height: H } = canvas;
 
         ctx.fillStyle = '#060b10';
@@ -151,7 +147,6 @@ function HistorySeismograph({ title, batches }) {
 
     }, [batches]);
 
-    // Canvas is wide enough for all points plus the axis area
     const canvasWidth = AXIS_W + Math.max(900 - AXIS_W, batches.length * PX_PER_POINT);
 
     return (
@@ -208,9 +203,8 @@ function DayDetail({ dateStr, onClose }) {
 
 function DayCell({ day, dateStr, worst, isToday, isSelected, onClick }) {
     const hasData = !!worst;
-
-    const bg     = isSelected ? COLORS[worst] : isToday ? '#6964ff' : 'transparent';
-    const border = !isSelected && hasData && !isToday ? `2px dotted ${COLORS[worst]}` : 'none';
+    const bg      = isSelected ? COLORS[worst] : isToday ? '#6964ff' : 'transparent';
+    const border  = !isSelected && hasData && !isToday ? `2px dotted ${COLORS[worst]}` : 'none';
 
     return (
         <div style={styles.cellWrap}>

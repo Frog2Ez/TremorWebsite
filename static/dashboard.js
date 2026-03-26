@@ -9,19 +9,15 @@ const COLORS = {
     severe:   '#dd2c00',
 };
 
-// Width in pixels reserved on the left for Y axis labels
-const AXIS_W = 34;
+const AXIS_W  = 34;
+const Y_TICKS = [0, 2, 4, 6, 8, 10, 12];
 
-// Y axis tick values — magnitude goes 0 to 12
-const Y_TICKS = [0, 3, 6, 9, 12];
-
-// Converts a magnitude value to a canvas Y coordinate.
-// The waveform only uses the top half of the canvas (above centre line).
+// Maps magnitude to Y coordinate using the full canvas height
 function magToY(mag, H) {
-    return H / 2 - (mag / 12) * (H / 2 - 8);
+    return H - 8 - (mag / 12) * (H - 16);
 }
 
-// Draws Y axis labels and faint horizontal grid lines
+// Draws Y axis labels and horizontal grid lines
 function drawYAxis(ctx, W, H) {
     ctx.font      = '9px IBM Plex Mono';
     ctx.textAlign = 'right';
@@ -29,7 +25,6 @@ function drawYAxis(ctx, W, H) {
     Y_TICKS.forEach(mag => {
         const y = magToY(mag, H);
 
-        // Faint horizontal grid line across the full width
         ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
         ctx.lineWidth   = 1;
         ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
@@ -39,7 +34,6 @@ function drawYAxis(ctx, W, H) {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Label
         ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
         ctx.fillText(mag, AXIS_W - 4, y + 3);
     });
@@ -54,7 +48,6 @@ function Seismograph({ title, data }) {
     const buffer           = useRef([]);
     const lastTimestampRef = useRef(null);
 
-    // Only push new points into the buffer based on timestamp
     useEffect(() => {
         if (!data || data.length === 0) return;
 
@@ -75,33 +68,24 @@ function Seismograph({ title, data }) {
         });
     }, [data]);
 
-    // 60fps draw loop
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx    = canvas.getContext('2d');
         let   frame;
 
         function draw() {
-            const W   = canvas.width;
-            const H   = canvas.height;
-            const buf = buffer.current;
-            const plotW = W - AXIS_W;  // usable width after the axis
+            const W     = canvas.width;
+            const H     = canvas.height;
+            const buf   = buffer.current;
+            const plotW = W - AXIS_W;
 
-            // Trim buffer to the usable plot width
             while (buf.length > plotW) buf.shift();
 
-            // Clear
             ctx.fillStyle = '#060b10';
             ctx.fillRect(0, 0, W, H);
 
-            // Y axis background separator
-            ctx.fillStyle = '#060b10';
-            ctx.fillRect(0, 0, AXIS_W, H);
-
-            // Y axis grid lines and labels
             drawYAxis(ctx, W, H);
 
-            // Waveform — offset everything by AXIS_W on the X axis
             for (let i = 1; i < buf.length; i++) {
                 const x1  = AXIS_W + (plotW - buf.length + i - 1);
                 const x2  = AXIS_W + (plotW - buf.length + i);
