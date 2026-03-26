@@ -9,35 +9,73 @@ const COLORS = {
     severe:   '#dd2c00',
 };
 
+// Width in pixels reserved on the left for Y axis labels
+const AXIS_W = 34;
+
+// Y axis tick values — magnitude goes 0 to 12
+const Y_TICKS = [0, 3, 6, 9, 12];
+
+// Converts a magnitude value to a canvas Y coordinate.
+// The waveform only uses the top half of the canvas (above centre line).
+function magToY(mag, H) {
+    return H / 2 - (mag / 12) * (H / 2 - 8);
+}
+
+// Draws Y axis labels and faint horizontal grid lines
+function drawYAxis(ctx, W, H) {
+    ctx.font      = '9px IBM Plex Mono';
+    ctx.textAlign = 'right';
+
+    Y_TICKS.forEach(mag => {
+        const y = magToY(mag, H);
+
+        // Faint horizontal grid line across the full width
+        ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
+        ctx.beginPath();
+        ctx.moveTo(AXIS_W, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label
+        ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
+        ctx.fillText(mag, AXIS_W - 4, y + 3);
+    });
+
+    ctx.textAlign = 'left';
+}
+
 // ── Live Seismograph ──────────────────────────────────────────────
 
 function Seismograph({ title, data }) {
-    const canvasRef = useRef(null);
-    const buffer    = useRef([]);
+    const canvasRef        = useRef(null);
+    const buffer           = useRef([]);
     const lastTimestampRef = useRef(null);
 
+    // Only push new points into the buffer based on timestamp
     useEffect(() => {
-    if (!data || data.length === 0) return;
+        if (!data || data.length === 0) return;
 
-    const newPoints = data.filter(point => {
-        return (
+        const newPoints = data.filter(point =>
             !lastTimestampRef.current ||
             new Date(point.receivedAt) > new Date(lastTimestampRef.current)
         );
-    });
 
-    if (newPoints.length > 0) {
-        lastTimestampRef.current =
-            newPoints[newPoints.length - 1].receivedAt;
-    }
+        if (newPoints.length > 0) {
+            lastTimestampRef.current = newPoints[newPoints.length - 1].receivedAt;
+        }
 
-    newPoints.forEach(point => {
-        buffer.current.push({
-            mag: point.magnitude || 0,
-            sev: point.severity || 'none',
+        newPoints.forEach(point => {
+            buffer.current.push({
+                mag: point.magnitude || 0,
+                sev: point.severity  || 'none',
+            });
         });
-    });
     }, [data]);
+
+    // 60fps draw loop
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx    = canvas.getContext('2d');
@@ -47,22 +85,28 @@ function Seismograph({ title, data }) {
             const W   = canvas.width;
             const H   = canvas.height;
             const buf = buffer.current;
+            const plotW = W - AXIS_W;  // usable width after the axis
 
-            while (buf.length > W) buf.shift();
+            // Trim buffer to the usable plot width
+            while (buf.length > plotW) buf.shift();
 
+            // Clear
             ctx.fillStyle = '#060b10';
             ctx.fillRect(0, 0, W, H);
 
-            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-            ctx.setLineDash([4, 6]);
-            ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
-            ctx.setLineDash([]);
+            // Y axis background separator
+            ctx.fillStyle = '#060b10';
+            ctx.fillRect(0, 0, AXIS_W, H);
 
+            // Y axis grid lines and labels
+            drawYAxis(ctx, W, H);
+
+            // Waveform — offset everything by AXIS_W on the X axis
             for (let i = 1; i < buf.length; i++) {
-                const x1  = W - buf.length + i - 1;
-                const x2  = W - buf.length + i;
-                const y1  = H / 2 - (buf[i - 1].mag / 12) * (H / 2 - 8);
-                const y2  = H / 2 - (buf[i].mag     / 12) * (H / 2 - 8);
+                const x1  = AXIS_W + (plotW - buf.length + i - 1);
+                const x2  = AXIS_W + (plotW - buf.length + i);
+                const y1  = magToY(buf[i - 1].mag, H);
+                const y2  = magToY(buf[i].mag,     H);
                 const col = COLORS[buf[i].sev];
 
                 ctx.strokeStyle = col;
@@ -157,14 +201,12 @@ function LiveView() {
 }
 
 // ── History View ──────────────────────────────────────────────────
-// Graph on top, calendar below it.
 
 function HistoryView() {
     const [selectedDate, setSelectedDate] = useState(null);
 
     return (
         <div>
-            {/* Graph area — shows placeholder or day detail */}
             <div style={{ marginBottom: 24 }}>
                 {selectedDate
                     ? <DayDetail dateStr={selectedDate} onClose={() => setSelectedDate(null)} />
@@ -173,12 +215,7 @@ function HistoryView() {
                       </div>
                 }
             </div>
-
-            {/* Calendar below */}
-            <Calendar
-                onSelectDate={setSelectedDate}
-                selectedDate={selectedDate}
-            />
+            <Calendar onSelectDate={setSelectedDate} selectedDate={selectedDate} />
         </div>
     );
 }

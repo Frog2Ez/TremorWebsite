@@ -1,20 +1,21 @@
 // calendar.js
 
 const COLORS = {
-    none: '#00c853',
-    mild: '#ffd600',
+    none:     '#00c853',
+    mild:     '#ffd600',
     moderate: '#ff6d00',
-    severe: '#dd2c00',
+    severe:   '#dd2c00',
 };
 
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const PX_PER_POINT = 8;
+const AXIS_W       = 34;   // pixels reserved on the left for Y axis
+const Y_TICKS      = [0, 3, 6, 9, 12];
 
 
 // -------------------- Helpers ------------------------------------------------
-
 
 const formatTime = (iso) =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -22,63 +23,73 @@ const formatTime = (iso) =>
 const sortByTime = (batches) =>
     [...batches].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
 
-const getY = (mag, height) =>
-    height / 2 - (mag / 12) * (height / 2 - 8);
+const getY = (mag, H) =>
+    H / 2 - (mag / 12) * (H / 2 - 8);
 
 
 // -------------------- Drawing Functions ------------------------------------------------
 
-function drawCentreLine(ctx, W, H) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath();
-    ctx.moveTo(0, H / 2);
-    ctx.lineTo(W, H / 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+// Draws Y axis labels and horizontal grid lines at each tick value
+function drawYAxis(ctx, W, H) {
+    ctx.font      = '9px IBM Plex Mono';
+    ctx.textAlign = 'right';
+
+    Y_TICKS.forEach(mag => {
+        const y = getY(mag, H);
+
+        // Horizontal grid line — solid for 0 (baseline), dotted for the rest
+        ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
+        ctx.beginPath();
+        ctx.moveTo(AXIS_W, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label
+        ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
+        ctx.fillText(mag, AXIS_W - 4, y + 3);
+    });
+
+    ctx.textAlign = 'left';
 }
 
+// Draws the waveform, offset by AXIS_W so it doesn't overlap the Y axis labels
 function drawWaveform(ctx, data, H) {
     for (let i = 1; i < data.length; i++) {
         const prev = data[i - 1];
         const curr = data[i];
 
         ctx.strokeStyle = COLORS[curr.severity || 'none'];
-        ctx.lineWidth = 1.5;
-
+        ctx.lineWidth   = 1.5;
         ctx.beginPath();
-        ctx.moveTo((i - 1) * PX_PER_POINT, getY(prev.magnitude, H));
-        ctx.lineTo(i * PX_PER_POINT, getY(curr.magnitude, H));
+        ctx.moveTo(AXIS_W + (i - 1) * PX_PER_POINT, getY(prev.magnitude, H));
+        ctx.lineTo(AXIS_W + i       * PX_PER_POINT, getY(curr.magnitude, H));
         ctx.stroke();
     }
 }
 
+// Draws time labels along the bottom, offset by AXIS_W
 function drawTimeLabels(ctx, data, H) {
     const step = Math.max(1, Math.floor(120 / PX_PER_POINT));
 
-    ctx.font = '9px IBM Plex Mono';
+    ctx.font      = '9px IBM Plex Mono';
     ctx.fillStyle = '#3a5060';
+    ctx.textAlign = 'left';
 
     data.forEach((b, i) => {
         if (i % step !== 0) return;
-        ctx.fillText(formatTime(b.receivedAt), i * PX_PER_POINT + 2, H - 4);
+        ctx.fillText(formatTime(b.receivedAt), AXIS_W + i * PX_PER_POINT + 2, H - 4);
     });
 }
 
 
 // -------------------- UI Components ------------------------------------------------
 
-
 function Label({ text }) {
     return (
-        <div style={{
-            fontFamily: 'IBM Plex Mono',
-            fontSize: 10,
-            color: '#4a6070',
-            textTransform: 'uppercase',
-            letterSpacing: 2,
-            marginBottom: 5
-        }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: '#4a6070', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 5 }}>
             {text}
         </div>
     );
@@ -86,11 +97,7 @@ function Label({ text }) {
 
 function Loading() {
     return (
-        <div style={{
-            fontFamily: 'IBM Plex Mono',
-            fontSize: 12,
-            color: '#3a5060'
-        }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: '#3a5060' }}>
             Loading...
         </div>
     );
@@ -98,30 +105,9 @@ function Loading() {
 
 function Header({ label, onClose }) {
     return (
-        <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 16
-        }}>
-            <div style={{
-                fontFamily: 'IBM Plex Mono',
-                fontSize: 13,
-                color: '#ccd6e0'
-            }}>
-                {label}
-            </div>
-
-            <button onClick={onClose} style={{
-                background: 'none',
-                border: '1px solid #1e2a3a',
-                color: '#3a5060',
-                borderRadius: 4,
-                padding: '3px 10px',
-                fontFamily: 'IBM Plex Mono',
-                fontSize: 11,
-                cursor: 'pointer'
-            }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 13, color: '#ccd6e0' }}>{label}</div>
+            <button onClick={onClose} style={{ background: 'none', border: '1px solid #1e2a3a', color: '#3a5060', borderRadius: 4, padding: '3px 10px', fontFamily: 'IBM Plex Mono', fontSize: 11, cursor: 'pointer' }}>
                 CLOSE
             </button>
         </div>
@@ -130,18 +116,12 @@ function Header({ label, onClose }) {
 
 function Dot({ active, color }) {
     return (
-        <div style={{
-            width: 4,
-            height: 4,
-            borderRadius: '50%',
-            background: active ? 'rgba(255,255,255,0.6)' : color
-        }} />
+        <div style={{ width: 4, height: 4, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.6)' : color }} />
     );
 }
 
 
 // -------------------- History Seismograph ------------------------------------------------
-// Displays a waveform visualization of tremor data for a given day.
 
 function HistorySeismograph({ title, batches }) {
     const canvasRef = React.useRef(null);
@@ -150,7 +130,7 @@ function HistorySeismograph({ title, batches }) {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const ctx = canvas.getContext('2d');
+        const ctx       = canvas.getContext('2d');
         const { width: W, height: H } = canvas;
 
         ctx.fillStyle = '#060b10';
@@ -158,20 +138,21 @@ function HistorySeismograph({ title, batches }) {
 
         if (!batches.length) {
             ctx.fillStyle = '#2a3a48';
-            ctx.font = '11px IBM Plex Mono';
-            ctx.fillText('No data', 10, H / 2);
+            ctx.font      = '11px IBM Plex Mono';
+            ctx.fillText('No data', AXIS_W + 10, H / 2);
             return;
         }
 
         const data = sortByTime(batches);
 
-        drawCentreLine(ctx, W, H);
+        drawYAxis(ctx, W, H);
         drawWaveform(ctx, data, H);
         drawTimeLabels(ctx, data, H);
 
     }, [batches]);
 
-    const canvasWidth = Math.max(900, batches.length * PX_PER_POINT);
+    // Canvas is wide enough for all points plus the axis area
+    const canvasWidth = AXIS_W + Math.max(900 - AXIS_W, batches.length * PX_PER_POINT);
 
     return (
         <div style={{ marginBottom: 14 }}>
@@ -190,9 +171,6 @@ function HistorySeismograph({ title, batches }) {
 
 
 // -------------------- Day Detail Panel ------------------------------------------------
-// When a date is selected on the calendar, this panel fetches and displays detailed data for that day.
-// It shows separate seismographs for gyroscope and accelerometer data.
-
 
 function DayDetail({ dateStr, onClose }) {
     const [dayData, setDayData] = React.useState(null);
@@ -219,39 +197,20 @@ function DayDetail({ dateStr, onClose }) {
     return (
         <div style={styles.panel}>
             <Header label={label} onClose={onClose} />
-
-            <HistorySeismograph
-                title="Gyroscope"
-                batches={dayData.batches.filter(b => b.sensor === 'GYROSCOPE')}
-            />
-
-            <HistorySeismograph
-                title="Accelerometer"
-                batches={dayData.batches.filter(b => b.sensor === 'ACCELEROMETER')}
-            />
+            <HistorySeismograph title="Gyroscope"     batches={dayData.batches.filter(b => b.sensor === 'GYROSCOPE')}     />
+            <HistorySeismograph title="Accelerometer" batches={dayData.batches.filter(b => b.sensor === 'ACCELEROMETER')} />
         </div>
     );
 }
 
 
-// ------------ Calendar Day Cell ------------------------------------------------
-// Renders an individual day cell in the calendar grid.
-// Indicates if data is available for that day and its severity level.
-// Highlights the cell if it's today or currently selected.
-
+// -------------------- Calendar Day Cell ------------------------------------------------
 
 function DayCell({ day, dateStr, worst, isToday, isSelected, onClick }) {
     const hasData = !!worst;
 
-    const bg =
-        isSelected ? COLORS[worst] :
-        isToday ? '#6964ff' :
-        'transparent';
-
-    const border =
-        !isSelected && hasData && !isToday
-            ? `2px dotted ${COLORS[worst]}`
-            : 'none';
+    const bg     = isSelected ? COLORS[worst] : isToday ? '#6964ff' : 'transparent';
+    const border = !isSelected && hasData && !isToday ? `2px dotted ${COLORS[worst]}` : 'none';
 
     return (
         <div style={styles.cellWrap}>
@@ -262,48 +221,35 @@ function DayCell({ day, dateStr, worst, isToday, isSelected, onClick }) {
                     background: bg,
                     border,
                     cursor: hasData ? 'pointer' : 'default',
-                    color: isSelected || isToday
-                        ? '#fff'
-                        : hasData
-                        ? '#8899aa'
-                        : '#2a3a48',
+                    color: isSelected || isToday ? '#fff' : hasData ? '#8899aa' : '#2a3a48',
                 }}
             >
                 {day}
-                {hasData && (
-                    <Dot active={isSelected || isToday} color={COLORS[worst]} />
-                )}
+                {hasData && <Dot active={isSelected || isToday} color={COLORS[worst]} />}
             </div>
         </div>
     );
 }
 
 
-// ------------- Calendar -------------------------------------------------
-// Renders the calendar grid and handles month navigation.
-// Fetches available dates from the server and indicates them on the calendar.
-// When a date is selected, shows the DayDetail view above the calendar.
-
+// -------------------- Calendar ------------------------------------------------
 
 function Calendar({ onSelectDate, selectedDate }) {
-    const [dates, setDates] = React.useState([]);
+    const [dates,        setDates]        = React.useState([]);
     const [currentMonth, setCurrentMonth] = React.useState(new Date());
 
     React.useEffect(() => {
-        fetch('/api/history/dates')
-            .then(r => r.json())
-            .then(setDates);
+        fetch('/api/history/dates').then(r => r.json()).then(setDates);
     }, []);
 
     const dateMap = {};
     dates.forEach(d => { dateMap[d.date] = d.worst; });
 
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-
-    const firstDay = new Date(year, month, 1).getDay();
+    const year        = currentMonth.getFullYear();
+    const month       = currentMonth.getMonth();
+    const firstDay    = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr    = new Date().toISOString().split('T')[0];
 
     const cells = [];
     for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -311,34 +257,23 @@ function Calendar({ onSelectDate, selectedDate }) {
 
     return (
         <div style={styles.calendar}>
-
-            {/* Header */}
             <div style={styles.calendarHeader}>
-                <div style={styles.monthLabel}>
-                    {MONTHS[month]} {year}
-                </div>
-
+                <div style={styles.monthLabel}>{MONTHS[month]} {year}</div>
                 <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} style={styles.navBtn}>‹</button>
                     <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} style={styles.navBtn}>›</button>
                 </div>
             </div>
 
-            {/* Weekdays */}
             <div style={styles.grid}>
-                {WEEKDAYS.map(d => (
-                    <div key={d} style={styles.weekday}>{d}</div>
-                ))}
+                {WEEKDAYS.map(d => <div key={d} style={styles.weekday}>{d}</div>)}
             </div>
 
-            {/* Days */}
             <div style={styles.grid}>
                 {cells.map((day, i) => {
                     if (!day) return <div key={i} style={{ padding: '14px 0' }} />;
-
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const worst = dateMap[dateStr];
-
+                    const worst   = dateMap[dateStr];
                     return (
                         <DayCell
                             key={i}
@@ -356,9 +291,8 @@ function Calendar({ onSelectDate, selectedDate }) {
     );
 }
 
-// ─────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────
+
+// -------------------- Styles ------------------------------------------------
 
 const styles = {
     panel: {
