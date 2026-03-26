@@ -1,18 +1,11 @@
 // calendar.js
-
-const COLORS = {
-    none:     '#00c853',
-    mild:     '#ffd600',
-    moderate: '#ff6d00',
-    severe:   '#dd2c00',
-};
+// Note: COLORS, AXIS_W, Y_TICKS, magToY and drawYAxis are defined in seismograph.js
+// which is loaded first in index.html.
 
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const PX_PER_POINT = 8;
-const AXIS_W       = 34;
-const Y_TICKS      = [0, 2, 4, 6, 8, 10, 12];
 
 
 // -------------------- Helpers ------------------------------------------------
@@ -23,35 +16,8 @@ const formatTime = (iso) =>
 const sortByTime = (batches) =>
     [...batches].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
 
-// Maps magnitude to Y using the full canvas height
-const getY = (mag, H) =>
-    H - 8 - (mag / 12) * (H - 16);
-
 
 // -------------------- Drawing Functions ------------------------------------------------
-
-function drawYAxis(ctx, W, H) {
-    ctx.font      = '9px IBM Plex Mono';
-    ctx.textAlign = 'right';
-
-    Y_TICKS.forEach(mag => {
-        const y = getY(mag, H);
-
-        ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
-        ctx.lineWidth   = 1;
-        ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
-        ctx.beginPath();
-        ctx.moveTo(AXIS_W, y);
-        ctx.lineTo(W, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
-        ctx.fillText(mag, AXIS_W - 4, y + 3);
-    });
-
-    ctx.textAlign = 'left';
-}
 
 function drawWaveform(ctx, data, H) {
     for (let i = 1; i < data.length; i++) {
@@ -61,8 +27,8 @@ function drawWaveform(ctx, data, H) {
         ctx.strokeStyle = COLORS[curr.severity || 'none'];
         ctx.lineWidth   = 1.5;
         ctx.beginPath();
-        ctx.moveTo(AXIS_W + (i - 1) * PX_PER_POINT, getY(prev.magnitude, H));
-        ctx.lineTo(AXIS_W + i       * PX_PER_POINT, getY(curr.magnitude, H));
+        ctx.moveTo(AXIS_W + (i - 1) * PX_PER_POINT, magToY(prev.magnitude, H));
+        ctx.lineTo(AXIS_W + i       * PX_PER_POINT, magToY(curr.magnitude, H));
         ctx.stroke();
     }
 }
@@ -152,7 +118,7 @@ function HistorySeismograph({ title, batches }) {
     return (
         <div style={{ marginBottom: 14 }}>
             <Label text={title} />
-            <div style={styles.scrollBox}>
+            <div className="cal-scroll-box">
                 <canvas
                     ref={canvasRef}
                     width={canvasWidth}
@@ -182,7 +148,7 @@ function DayDetail({ dateStr, onClose }) {
 
     if (!dayData) {
         return (
-            <div style={styles.panel}>
+            <div className="cal-panel">
                 <Header label={label} onClose={onClose} />
                 <Loading />
             </div>
@@ -190,7 +156,7 @@ function DayDetail({ dateStr, onClose }) {
     }
 
     return (
-        <div style={styles.panel}>
+        <div className="cal-panel">
             <Header label={label} onClose={onClose} />
             <HistorySeismograph title="Gyroscope"     batches={dayData.batches.filter(b => b.sensor === 'GYROSCOPE')}     />
             <HistorySeismograph title="Accelerometer" batches={dayData.batches.filter(b => b.sensor === 'ACCELEROMETER')} />
@@ -207,11 +173,11 @@ function DayCell({ day, dateStr, worst, isToday, isSelected, onClick }) {
     const border  = !isSelected && hasData && !isToday ? `2px dotted ${COLORS[worst]}` : 'none';
 
     return (
-        <div style={styles.cellWrap}>
+        <div className="cal-cell-wrap">
             <div
                 onClick={() => hasData && onClick()}
+                className="cal-cell"
                 style={{
-                    ...styles.cell,
                     background: bg,
                     border,
                     cursor: hasData ? 'pointer' : 'default',
@@ -250,20 +216,20 @@ function Calendar({ onSelectDate, selectedDate }) {
     for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
     return (
-        <div style={styles.calendar}>
-            <div style={styles.calendarHeader}>
-                <div style={styles.monthLabel}>{MONTHS[month]} {year}</div>
+        <div className="cal-calendar">
+            <div className="cal-calendar-header">
+                <div className="cal-month-label">{MONTHS[month]} {year}</div>
                 <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} style={styles.navBtn}>‹</button>
-                    <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} style={styles.navBtn}>›</button>
+                    <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} className="cal-nav-btn">‹</button>
+                    <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} className="cal-nav-btn">›</button>
                 </div>
             </div>
 
-            <div style={styles.grid}>
-                {WEEKDAYS.map(d => <div key={d} style={styles.weekday}>{d}</div>)}
+            <div className="cal-grid">
+                {WEEKDAYS.map(d => <div key={d} className="cal-weekday">{d}</div>)}
             </div>
 
-            <div style={styles.grid}>
+            <div className="cal-grid">
                 {cells.map((day, i) => {
                     if (!day) return <div key={i} style={{ padding: '14px 0' }} />;
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -284,76 +250,3 @@ function Calendar({ onSelectDate, selectedDate }) {
         </div>
     );
 }
-
-
-// -------------------- Styles ------------------------------------------------
-
-const styles = {
-    panel: {
-        background: '#0d1117',
-        border: '1px solid #111d28',
-        borderRadius: 6,
-        padding: 16,
-    },
-    scrollBox: {
-        overflowX: 'auto',
-        border: '1px solid #111d28',
-        borderRadius: 4,
-    },
-    calendar: {
-        background: '#0d1117',
-        border: '1px solid #111d28',
-        borderRadius: 10,
-        padding: 16,
-    },
-    calendarHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        padding: '0 4px',
-    },
-    monthLabel: {
-        fontFamily: 'IBM Plex Mono',
-        fontSize: 14,
-        color: '#ccd6e0',
-    },
-    navBtn: {
-        width: 30,
-        height: 30,
-        borderRadius: '50%',
-        background: 'none',
-        border: '1px solid #1e2a3a',
-        color: '#4a6070',
-        fontSize: 16,
-        cursor: 'pointer',
-    },
-    grid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(7, 1fr)',
-    },
-    weekday: {
-        textAlign: 'center',
-        fontFamily: 'IBM Plex Mono',
-        fontSize: 10,
-        color: '#2a4050',
-        padding: '6px 0',
-    },
-    cellWrap: {
-        display: 'flex',
-        justifyContent: 'center',
-        padding: '4px 0',
-    },
-    cell: {
-        width: 34,
-        height: 34,
-        borderRadius: '50%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'IBM Plex Mono',
-        fontSize: 12,
-        gap: 2,
-    },
-};

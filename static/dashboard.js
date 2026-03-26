@@ -1,45 +1,8 @@
 // dashboard.js
+// Note: COLORS, AXIS_W, Y_TICKS, magToY and drawYAxis are defined in seismograph.js
+// which is loaded first in index.html.
 
 const { useState, useEffect, useRef } = React;
-
-const COLORS = {
-    none:     '#00c853',
-    mild:     '#ffd600',
-    moderate: '#ff6d00',
-    severe:   '#dd2c00',
-};
-
-const AXIS_W  = 34;
-const Y_TICKS = [0, 2, 4, 6, 8, 10, 12];
-
-// Maps magnitude to Y coordinate using the full canvas height
-function magToY(mag, H) {
-    return H - 8 - (mag / 12) * (H - 16);
-}
-
-// Draws Y axis labels and horizontal grid lines
-function drawYAxis(ctx, W, H) {
-    ctx.font      = '9px IBM Plex Mono';
-    ctx.textAlign = 'right';
-
-    Y_TICKS.forEach(mag => {
-        const y = magToY(mag, H);
-
-        ctx.strokeStyle = mag === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)';
-        ctx.lineWidth   = 1;
-        ctx.setLineDash(mag === 0 ? [4, 6] : [2, 6]);
-        ctx.beginPath();
-        ctx.moveTo(AXIS_W, y);
-        ctx.lineTo(W, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = mag === 0 ? '#3a5060' : '#2a3a48';
-        ctx.fillText(mag, AXIS_W - 4, y + 3);
-    });
-
-    ctx.textAlign = 'left';
-}
 
 // ── Live Seismograph ──────────────────────────────────────────────
 

@@ -15,3 +15,87 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #0d1117; }
 ::-webkit-scrollbar-thumb { background: #1e2a3a; border-radius: 3px; }
+
+/* ── Calendar component styles ───────────────────────────────── */
+
+.cal-panel {
+    background: #0d1117;
+    border: 1px solid #111d28;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.cal-scroll-box {
+    overflow-x: auto;
+    border: 1px solid #111d28;
+    border-radius: 4px;
+}
+
+.cal-calendar {
+    background: #0d1117;
+    border: 1px solid #111d28;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.cal-calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+.cal-month-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: #ccd6e0;
+}
+
+.cal-nav-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: none;
+    border: 1px solid #1e2a3a;
+    color: #4a6070;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.cal-nav-btn:hover {
+    background: #1e2a3a;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.cal-weekday {
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: #2a4050;
+    padding: 6px 0;
+}
+
+.cal-cell-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+}
+
+.cal-cell {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    gap: 2px;
+}
