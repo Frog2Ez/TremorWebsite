@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify, render_template
-from datetime import datetime, date, timedelta
+from datetime import datetime
 import collections
-import random
-import sqlite3
+import os
+import psycopg2
 from dummy_data import seed_dummy_data
 
 app = Flask(__name__)
@@ -10,30 +10,30 @@ app = Flask(__name__)
 # ── Live session — in-memory store for current session
 live_sessions = collections.deque(maxlen=1000)
 
-# ── SQLite setup ──────────────────────────────────────────────────
-def init_db():
-    conn = sqlite3.connect("tremor.db")
-    c = conn.cursor()
+# ── PostgreSQL connection ─────────────────────────────────────────
 
+def get_db():
+    return psycopg2.connect(os.environ["DATABASE_URL"])
+
+# ── DB setup ──────────────────────────────────────────────────────
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS batches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sensor TEXT,
-            magnitude REAL,
-            severity TEXT,
-            detected INTEGER,
+            id         SERIAL PRIMARY KEY,
+            sensor     TEXT,
+            magnitude  REAL,
+            severity   TEXT,
+            detected   BOOLEAN,
             receivedAt TEXT
         )
     """)
-
     conn.commit()
     conn.close()
 
 init_db()
-
-# ── Dummy data ────────────────────────────────────────────────────
-# Generates realistic-looking tremor data for the past 5 days
-
 seed_dummy_data()
 
 # ── Live API ──────────────────────────────────────────────────────
@@ -45,17 +45,16 @@ def receive_data():
         payload["receivedAt"] = datetime.now().isoformat()
         live_sessions.append(payload)
 
-        # 💾 Save to SQLite
-        conn = sqlite3.connect("tremor.db")
+        conn = get_db()
         c = conn.cursor()
         c.execute("""
             INSERT INTO batches (sensor, magnitude, severity, detected, receivedAt)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
         """, (
             payload.get("sensor"),
             payload.get("magnitude"),
             payload.get("severity"),
-            int(payload.get("detected", False)),
+            payload.get("detected", False),
             payload.get("receivedAt")
         ))
         conn.commit()
@@ -73,24 +72,22 @@ def receive_data():
 def get_batches():
     limit = int(request.args.get("limit", 100))
 
-    conn = sqlite3.connect("tremor.db")
+    conn = get_db()
     c = conn.cursor()
-
     c.execute("""
         SELECT sensor, magnitude, severity, detected, receivedAt
         FROM batches
         ORDER BY receivedAt DESC
-        LIMIT ?
+        LIMIT %s
     """, (limit,))
-
     rows = c.fetchall()
     conn.close()
 
     batches = [{
-        "sensor": r[0],
-        "magnitude": r[1],
-        "severity": r[2],
-        "detected": bool(r[3]),
+        "sensor":     r[0],
+        "magnitude":  r[1],
+        "severity":   r[2],
+        "detected":   bool(r[3]),
         "receivedAt": r[4]
     } for r in rows]
 
@@ -99,32 +96,24 @@ def get_batches():
 
 @app.route("/api/summary")
 def get_summary():
-    conn = sqlite3.connect("tremor.db")
+    conn = get_db()
     c = conn.cursor()
 
-    # Total number of rows in DB
     c.execute("SELECT COUNT(*) FROM batches")
     total = c.fetchone()[0]
 
-    # Count per severity
     c.execute("""
         SELECT severity, COUNT(*)
         FROM batches
         GROUP BY severity
     """)
-
     summary = {"none": 0, "mild": 0, "moderate": 0, "severe": 0}
-
     for severity, count in c.fetchall():
         if severity in summary:
             summary[severity] = count
 
     conn.close()
-
-    return jsonify({
-        "totalBatches": total,
-        "summary": summary
-    })
+    return jsonify({"totalBatches": total, "summary": summary})
 
 
 @app.route("/api/clear", methods=["POST"])
@@ -136,12 +125,10 @@ def clear_data():
 
 @app.route("/api/history/dates")
 def get_history_dates():
-    """Returns list of dates that have data, with severity summary for each."""
-    conn = sqlite3.connect("tremor.db")
+    conn = get_db()
     c = conn.cursor()
-
     c.execute("""
-        SELECT substr(receivedAt,1,10) as date, severity
+        SELECT LEFT(receivedAt, 10) AS date, severity
         FROM batches
     """)
     rows = c.fetchall()
@@ -150,7 +137,7 @@ def get_history_dates():
     grouped = {}
     for date_str, severity in rows:
         if date_str not in grouped:
-            grouped[date_str] = {"none":0,"mild":0,"moderate":0,"severe":0}
+            grouped[date_str] = {"none": 0, "mild": 0, "moderate": 0, "severe": 0}
         if severity in grouped[date_str]:
             grouped[date_str][severity] += 1
 
@@ -165,10 +152,10 @@ def get_history_dates():
         else:
             worst = "none"
         result.append({
-            "date": date_str,
-            "total": sum(summary.values()),
+            "date":    date_str,
+            "total":   sum(summary.values()),
             "summary": summary,
-            "worst": worst
+            "worst":   worst
         })
 
     return jsonify(sorted(result, key=lambda x: x["date"]))
@@ -176,26 +163,24 @@ def get_history_dates():
 
 @app.route("/api/history/<date_str>")
 def get_history_for_date(date_str):
-    """Returns all batches for a specific date."""
-    conn = sqlite3.connect("tremor.db")
+    conn = get_db()
     c = conn.cursor()
-
     c.execute("""
         SELECT sensor, magnitude, severity, detected, receivedAt
         FROM batches
-        WHERE substr(receivedAt,1,10) = ?
+        WHERE LEFT(receivedAt, 10) = %s
     """, (date_str,))
     rows = c.fetchall()
     conn.close()
 
     batches = []
-    summary = {"none":0,"mild":0,"moderate":0,"severe":0}
+    summary = {"none": 0, "mild": 0, "moderate": 0, "severe": 0}
     for row in rows:
         b = {
-            "sensor": row[0],
-            "magnitude": row[1],
-            "severity": row[2],
-            "detected": bool(row[3]),
+            "sensor":     row[0],
+            "magnitude":  row[1],
+            "severity":   row[2],
+            "detected":   bool(row[3]),
             "receivedAt": row[4]
         }
         batches.append(b)
@@ -203,10 +188,10 @@ def get_history_for_date(date_str):
             summary[b["severity"]] += 1
 
     return jsonify({
-        "date": date_str,
+        "date":    date_str,
         "batches": batches,
         "summary": summary,
-        "total": len(batches)
+        "total":   len(batches)
     })
 
 
